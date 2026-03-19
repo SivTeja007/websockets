@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsc -b && node ./dist/index.js"
+    "dev": "tsc -b && node ./dist/index.js",
+    "dev:backend": "npm run dev",
+    "dev:frontend": "npm run dev --prefix week-17-2-react-main -- --host 127.0.0.1 --port 5173",
+    "dev:all": "concurrently -k -n BACKEND,FRONTEND \"npm:dev:backend\" \"npm:dev:frontend\""
   },
   "keywords": [],
   "author": "",
@@ -14,5 +17,8 @@
     "@types/ws": "^8.18.1",
     "typescript": "^5.9.3",
     "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

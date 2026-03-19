@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebSocket Chat</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --card: #fffaf2;
+      --ink: #1f252b;
+      --accent: #006d77;
+      --accent-2: #e29578;
+      --line: #d6d2c7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 0%, #f8e7cc 0%, transparent 40%),
+        radial-gradient(circle at 80% 100%, #c6ece6 0%, transparent 35%),
+        var(--bg);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .app {
+      width: min(760px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 45px rgba(31, 37, 43, 0.12);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.1rem, 2vw, 1.4rem);
+      letter-spacing: 0.4px;
+    }
+
+    .status {
+      font-size: 0.9rem;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #ece8dd;
+    }
+
+    .status.connected {
+      background: #d7f3ec;
+      color: #0b534d;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chat-input {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 18px 20px 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    input, button {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 12px;
+    }
+
+    input:focus {
+      outline: 2px solid color-mix(in oklab, var(--accent), white 70%);
+      border-color: var(--accent);
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      padding-inline: 16px;
+    }
+
+    button:hover { filter: brightness(1.04); }
+
+    .messages {
+      height: min(50vh, 420px);
+      overflow: auto;
+      padding: 18px 20px;
+      display: grid;
+      gap: 10px;
+      background: linear-gradient(180deg, #fffcf6 0%, #f9f4eb 100%);
+    }
+
+    .msg {
+      max-width: 80%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid #ece2cf;
+      background: #fff;
+      word-break: break-word;
+    }
+
+    .msg.self {
+      margin-left: auto;
+      background: #e6f5f3;
+      border-color: #c6ece6;
+    }
+
+    @media (max-width: 640px) {
+      .controls, .chat-input { grid-template-columns: 1fr; }
+      button { width: 100%; }
+      .msg { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div class="header">
+      <h1>Room Chat</h1>
+      <span id="status" class="status">Disconnected</span>
+    </div>
+
+    <div class="controls">
+      <input id="roomInput" placeholder="Enter room id (example: general)" />
+      <button id="joinBtn">Join Room</button>
+    </div>
+
+    <section id="messages" class="messages"></section>
+
+    <div class="chat-input">
+      <input id="messageInput" placeholder="Type your message" />
+      <button id="sendBtn">Send</button>
+    </div>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const roomInput = document.getElementById("roomInput");
+    const joinBtn = document.getElementById("joinBtn");
+    const messageInput = document.getElementById("messageInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const messages = document.getElementById("messages");
+
+    const ws = new WebSocket(`ws://${location.host}`);
+    let activeRoom = "";
+
+    const setStatus = (text, connected = false) => {
+      statusEl.textContent = text;
+      statusEl.classList.toggle("connected", connected);
+    };
+
+    const addMessage = (text, isSelf = false) => {
+      const row = document.createElement("div");
+      row.className = `msg${isSelf ? " self" : ""}`;
+      row.textContent = text;
+      messages.appendChild(row);
+      messages.scrollTop = messages.scrollHeight;
+    };
+
+    ws.addEventListener("open", () => setStatus("Connected", true));
+    ws.addEventListener("close", () => setStatus("Disconnected", false));
+    ws.addEventListener("error", () => setStatus("Connection error", false));
+    ws.addEventListener("message", (event) => addMessage(String(event.data), false));
+
+    joinBtn.addEventListener("click", () => {
+      const roomId = roomInput.value.trim();
+      if (!roomId) return;
+
+      ws.send(JSON.stringify({
+        type: "join",
+        payload: { roomId }
+      }));
+
+      activeRoom = roomId;
+      addMessage(`Joined room: ${roomId}`, true);
+      roomInput.value = "";
+    });
+
+    const sendMessage = () => {
+      const message = messageInput.value.trim();
+      if (!message) return;
+      if (!activeRoom) {
+        addMessage("Join a room first.", true);
+        return;
+      }
+
+      ws.send(JSON.stringify({
+        type: "chat",
+        payload: { message }
+      }));
+
+      addMessage(message, true);
+      messageInput.value = "";
+    };
+
+    sendBtn.addEventListener("click", sendMessage);
+    messageInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") sendMessage();
+    });
+  </script>
+</body>
+</html>
